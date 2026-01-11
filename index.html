@@ -1,44 +1,44 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
 <head>
   <meta charset="UTF-8" />
   <title>./ GRADsaur Game</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-
-  <link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&display=swap" rel="stylesheet">
 
   <style>
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
 
-    :root {
+    :root{
       --bg-color: #080013;
       --symbol-color: #b347ff;
       --ui-color: #ffffff;
       --accent-color: #ffdc5c;
       --danger-color: #ff4b91;
       --ground-color: #1a082d;
+
+      --shell-max: 1100px;
+      --area-h: 520px;
+      --ground-h: 90px;
+      --runner-x: 150px;
     }
 
-    body {
-      height: 100vh;
+    body{
+      min-height: 100vh;
       overflow: hidden;
-      font-family: "Pixelify Sans", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      font-family: "Silkscreen", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
       background: var(--bg-color);
       color: var(--ui-color);
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      position: relative;
       gap: 24px;
       padding: 20px;
+      position: relative;
     }
 
-    .bg-tiles {
+    .bg-tiles{
       position: fixed;
       inset: 0;
       pointer-events: none;
@@ -47,38 +47,30 @@
       line-height: 1;
       color: var(--symbol-color);
       opacity: 0.18;
-      font-family: "Pixelify Sans", monospace;
+      font-family: "Silkscreen", monospace;
       white-space: pre;
-      letter-spacing: 0;
+      user-select: none;
     }
+    .bg-tiles span{ display: inline-block; animation: flicker 4s infinite alternate; }
+    @keyframes flicker { 0%{opacity:.08} 50%{opacity:.25} 100%{opacity:.18} }
 
-    .bg-tiles span {
-      display: inline-block;
-      animation: flicker 4s infinite alternate;
-    }
-
-    @keyframes flicker {
-      0% { opacity: 0.08; }
-      50% { opacity: 0.25; }
-      100% { opacity: 0.18; }
-    }
-
-    .title {
-      font-size: 32px;
-      letter-spacing: 0.2em;
+    .title{
+      font-size: 30px;
+      letter-spacing: 0.18em;
       color: var(--accent-color);
       text-shadow: 0 0 12px rgba(0,0,0,0.9), 0 0 24px var(--accent-color);
       z-index: 5;
       position: relative;
+      text-align: center;
     }
 
-    .game-container {
+    .game-container{
       position: relative;
-      max-width: 850px;
-      width: 95%;
+      width: min(96vw, var(--shell-max));
+      z-index: 5;
     }
 
-    .game-shell {
+    .game-shell{
       border-radius: 20px;
       border: 4px solid rgba(255,255,255,0.25);
       overflow: hidden;
@@ -86,47 +78,38 @@
       box-shadow: 0 0 60px rgba(0,0,0,0.85), inset 0 0 40px rgba(0,0,0,0.3);
     }
 
-    .hud {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 16px 32px;
-      font-size: 16px;
+    .hud{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      padding: 16px 28px;
+      font-size: 14px;
       background: linear-gradient(90deg, #200736, #3e0d6a, #2a0b5a);
       color: #ffe8ff;
       border-bottom: 1px solid rgba(255,255,255,0.1);
     }
-
-    .hud-left,
-    .hud-right {
-      display: flex;
-      gap: 24px;
-      align-items: center;
-    }
-
-    .hud-label {
-      opacity: 0.85;
-    }
-
-    .hud-value {
+    .hud-left,.hud-right{ display:flex; gap:22px; align-items:center; }
+    .hud-label{ opacity: .85; }
+    .hud-value{
       color: var(--accent-color);
       font-weight: 700;
-      font-size: 18px;
+      font-size: 16px;
+      min-width: 22px;
+      display: inline-block;
+      text-align: right;
     }
 
-    .game-area {
+    .game-area{
       position: relative;
-      height: 400px;
+      height: min(var(--area-h), 68vh);
       background: linear-gradient(#0a0215 0%, #050008 40%, #020002 100%);
       overflow: hidden;
     }
 
-    .ground {
-      position: absolute;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      height: 70px;
+    .ground{
+      position:absolute;
+      left:0; right:0; bottom:0;
+      height: var(--ground-h);
       background: repeating-linear-gradient(
         -45deg,
         var(--ground-color) 0,
@@ -137,126 +120,96 @@
       border-top: 3px solid rgba(255,255,255,0.18);
     }
 
-    .runner {
-      position: absolute;
-      bottom: 70px;
-      left: 120px;
-      font-size: 36px;
-      color: var(--accent-color);
+    .runner, .obstacle{
+      position:absolute;
+      bottom: var(--ground-h);
+      font-size: 44px;
       text-shadow: 0 0 12px rgba(0,0,0,1);
+      will-change: transform;
     }
+    .runner{ left: var(--runner-x); color: var(--accent-color); }
+    .obstacle{ color: var(--danger-color); }
 
-    .obstacle {
-      position: absolute;
-      bottom: 70px;
-      font-size: 36px;
-      color: var(--danger-color);
-      text-shadow: 0 0 12px rgba(0,0,0,1);
-    }
-
-    .overlay {
-      position: absolute;
-      inset: 0;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
+    .overlay{
+      position:absolute;
+      inset:0;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:center;
       background: radial-gradient(circle at center, rgba(10,0,30,0.94), rgba(0,0,0,0.98));
       z-index: 100;
       gap: 12px;
-      padding: 0 40px;
+      padding: 0 34px;
+      text-align:center;
     }
-
-    .overlay-title {
-      font-size: 28px;
+    .overlay-title{
+      font-size: 24px;
       color: var(--accent-color);
       text-shadow: 0 0 12px rgba(0,0,0,0.9);
     }
+    .overlay-text{ font-size: 14px; opacity: .97; font-weight: 600; max-width: 560px; }
+    .overlay-score{ font-size: 16px; color: var(--accent-color); font-weight: 700; }
 
-    .overlay-text {
-      font-size: 16px;
-      opacity: 0.97;
-      font-weight: 600;
-      text-align: center;
-      max-width: 500px;
+    .btn-row{
+      display:flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      justify-content: center;
+      margin-top: 6px;
     }
 
-    .overlay-score {
-      font-size: 20px;
-      color: var(--accent-color);
-      font-weight: 700;
-    }
-
-    .btn {
-      padding: 14px 28px;
+    .btn{
+      padding: 12px 18px;
       border-radius: 999px;
       border: 3px solid rgba(255,255,255,0.8);
       background: #120224;
       color: #ffffff;
-      font-size: 14px;
-      letter-spacing: 0.15em;
+      font-size: 12px;
+      letter-spacing: 0.12em;
       text-transform: uppercase;
       cursor: pointer;
-      transition: all 0.2s ease;
+      transition: transform .2s ease, box-shadow .2s ease, filter .2s ease;
       text-shadow: 0 0 6px rgba(0,0,0,1);
       font-family: inherit;
-      font-weight: 600;
+      font-weight: 700;
+      min-width: 210px;
     }
 
-    .btn-accent {
+    .btn-accent{
       background: linear-gradient(135deg, #ffdc5c, #ff9b40);
       color: #1a042c;
       border-color: #fff4c2;
-      box-shadow: 0 0 20px rgba(255,220,92,0.7);
-      font-weight: 700;
+      box-shadow: 0 0 18px rgba(255,220,92,0.65);
     }
 
-    .btn:hover {
-      transform: translateY(-3px);
+    .btn-danger{
+      background: linear-gradient(135deg, #ff4b91, #ff2b5f);
+      color: #140015;
+      border-color: rgba(255,255,255,0.85);
+      box-shadow: 0 0 18px rgba(255,75,145,0.45);
+    }
+
+    .btn:hover{
+      transform: translateY(-2px);
       box-shadow: 0 8px 24px rgba(0,0,0,0.9);
-      background: #1f043b;
+      filter: brightness(1.05);
     }
 
-    .btn-accent:hover {
-      background: linear-gradient(135deg, #ffe58b, #ffc36a);
-      box-shadow: 0 8px 32px rgba(255,220,92,0.8);
-    }
-
-    @media (max-width: 768px) {
-      .title {
-        font-size: 26px;
-      }
-      .game-container {
-        max-width: 650px;
-      }
-      .game-area {
-        height: 320px;
-      }
-      .runner,
-      .obstacle {
-        font-size: 28px;
-      }
-      .bg-tiles {
-        font-size: 10px;
-      }
-      .hud {
-        font-size: 14px;
-        padding: 12px 24px;
-      }
-      .hud-value {
-        font-size: 16px;
-      }
-      .runner {
-        left: 100px;
-      }
+    @media (max-width: 768px){
+      :root{ --area-h: 420px; --ground-h: 82px; --runner-x: 120px; }
+      .title{ font-size: 22px; }
+      .runner,.obstacle{ font-size: 36px; }
+      .bg-tiles{ font-size: 10px; }
+      .btn{ min-width: 180px; }
     }
   </style>
 </head>
+
 <body>
   <div class="bg-tiles" id="bgTiles"></div>
-
   <h1 class="title">./ GRADsaur Game</h1>
-  
+
   <div class="game-container">
     <div class="game-shell">
       <div class="hud">
@@ -265,7 +218,7 @@
           <span class="hud-value" id="score">0</span>
         </div>
         <div class="hud-right">
-          <span class="hud-label">BEST</span>
+          <span class="hud-label" id="bestLabel">BEST</span>
           <span class="hud-value" id="bestScore">0</span>
         </div>
       </div>
@@ -276,9 +229,13 @@
 
         <div class="overlay" id="overlay">
           <div class="overlay-title" id="overlayTitle">./ READY?</div>
-          <div class="overlay-text" id="overlayText">SPACE to jump</div>
+          <div class="overlay-text" id="overlayText">Choose mode, then SPACE / ↑ to jump</div>
           <div class="overlay-score" id="overlayScore"></div>
-          <button class="btn btn-accent" id="startBtn">./ START</button>
+
+          <div class="btn-row">
+            <button class="btn btn-accent" id="startNormalBtn">./ CLASSIC</button>
+            <button class="btn btn-danger" id="startChallengeBtn">./ CHALLENGE</button>
+          </div>
         </div>
       </div>
     </div>
@@ -286,18 +243,14 @@
 
   <script>
     const bgTiles = document.getElementById("bgTiles");
-    function fillBg() {
-      const cols = Math.ceil(window.innerWidth / 11) + 2;
-      const rows = Math.ceil(window.innerHeight / 11) + 6;
-      let output = "";
-      for (let r = 0; r < rows; r++) {
-        for (let c = 0; c < cols; c++) {
-          output += "./";
-        }
-        output += "\n";
-      }
-      const lines = output.split('\n');
-      bgTiles.innerHTML = lines.map(line => `<span>${line}</span>`).join('\n');
+    function fillBg(){
+      const tileW = 11;
+      const cols = Math.ceil(window.innerWidth / tileW) + 2;
+      const rows = Math.ceil(window.innerHeight / tileW) + 6;
+      let out = "";
+      for (let r = 0; r < rows; r++) out += "./".repeat(cols) + "\n";
+      const lines = out.trimEnd().split("\n");
+      bgTiles.innerHTML = lines.map(line => `<span>${line}</span>`).join("\n");
     }
     window.addEventListener("resize", fillBg);
     fillBg();
@@ -308,163 +261,219 @@
     const overlayTitle = document.getElementById("overlayTitle");
     const overlayText = document.getElementById("overlayText");
     const overlayScore = document.getElementById("overlayScore");
-    const startBtn = document.getElementById("startBtn");
+
+    const startNormalBtn = document.getElementById("startNormalBtn");
+    const startChallengeBtn = document.getElementById("startChallengeBtn");
+
     const scoreEl = document.getElementById("score");
+    const bestLabelEl = document.getElementById("bestLabel");
     const bestScoreEl = document.getElementById("bestScore");
 
+    const BEST_KEYS = {
+      normal: "gradsaur_best_normal",
+      challenge: "gradsaur_best_challenge"
+    };
+
+    const MODES = {
+      normal: {
+        name: "CLASSIC",
+        baseSpeed: 6.2,
+        speedByScore: (score) => 0,
+        spawnRange: () => ({ min: 700, max: 1350 })
+      },
+      challenge: {
+        name: "CHALLENGE",
+        baseSpeed: 6.2,
+        speedByScore: (score) => Math.floor(score / 5) * 1.3,
+
+        spawnRange: () => ({ min: 980, max: 1700 })
+      }
+    };
+
+    let modeKey = "normal";
+
+    let raf = null;
     let isRunning = false;
     let isJumping = false;
-    let jumpVelocity = 0;
-    let gravity = -0.55;
-    let positionY = 0;
-    let groundY = 70;
-    let baseBottom = groundY;
-    let animationFrameId = null;
+    let y = 0;
+    let v = 0;
+
+    const GRAVITY = -0.62;
+    const JUMP_V = 12.8;
+
     let obstacles = [];
-    let spawnTimer = 0;
+    let spawnMs = 0;
+
     let score = 0;
-    let bestScore = parseInt(localStorage.getItem("gradsour_best") || "0", 10);
+    let lastT = 0;
 
-    bestScoreEl.textContent = bestScore;
+    function cssVarNumber(name){
+      return parseFloat(getComputedStyle(document.documentElement).getPropertyValue(name)) || 0;
+    }
 
-    function resetGame() {
-      cancelAnimationFrame(animationFrameId);
-      isRunning = false;
-      isJumping = false;
-      positionY = 0;
-      jumpVelocity = 0;
-      spawnTimer = 0;
-      score = 0;
-      scoreEl.textContent = score;
+    function getBestForMode(key){
+      return parseInt(localStorage.getItem(BEST_KEYS[key]) || "0", 10); 
+    }
 
-      obstacles.forEach(o => o.el.remove());
-      obstacles = [];
+    function setBestForMode(key, value){
+      localStorage.setItem(BEST_KEYS[key], String(value)); 
+    }
 
-      runner.style.bottom = baseBottom + "px";
-      runner.style.left = "120px";
+    function updateBestUI(){
+      const best = getBestForMode(modeKey);
+      bestLabelEl.textContent = `BEST (${MODES[modeKey].name})`;
+      bestScoreEl.textContent = String(best);
+    }
 
+    function randSpawnMs(){
+      const r = MODES[modeKey].spawnRange(); 
+      return r.min + Math.random() * (r.max - r.min);
+    }
+
+    function setOverlayReady(){
       overlay.style.display = "flex";
       overlayTitle.textContent = "./ READY?";
-      overlayText.textContent = "SPACE to jump";
+      overlayText.textContent = "Choose mode, then SPACE / ↑ to jump";
       overlayScore.textContent = "";
-      startBtn.textContent = "./ START";
-      startBtn.className = "btn btn-accent";
+      startNormalBtn.textContent = "./ CLASSIC";
+      startChallengeBtn.textContent = "./ CHALLENGE";
+      updateBestUI();
     }
 
-    function startGame() {
-      if (isRunning) return;
-      overlay.style.display = "none";
-      isRunning = true;
+    function resetGame(){
+      cancelAnimationFrame(raf);
+      raf = null;
+      lastT = 0;
+
+      isRunning = false;
+      isJumping = false;
+
+      y = 0; v = 0;
+      spawnMs = 0;
+
       score = 0;
-      scoreEl.textContent = score;
-      spawnTimer = 0;
+      scoreEl.textContent = "0";
+
       obstacles.forEach(o => o.el.remove());
       obstacles = [];
-      positionY = 0;
-      jumpVelocity = 0;
-      gameLoop();
+
+      runner.style.transform = "translateY(0px)";
+      setOverlayReady();
     }
 
-    function spawnObstacle() {
+    function startGame(selectedModeKey){
+      modeKey = selectedModeKey;
+      updateBestUI();
+
+      overlay.style.display = "none";
+      isRunning = true;
+
+      obstacles.forEach(o => o.el.remove());
+      obstacles = [];
+
+      y = 0; v = 0;
+
+      spawnMs = randSpawnMs();
+
+      score = 0;
+      scoreEl.textContent = "0";
+
+      lastT = 0;
+      loop(performance.now());
+    }
+
+    function spawnObstacle(){
       const el = document.createElement("div");
       el.className = "obstacle";
-
-      const symbol = Math.random() < 0.5 ? "." : "/";
-      el.textContent = symbol;
-
-      el.style.right = "-60px";
+      el.textContent = Math.random() < 0.5 ? "." : "/";
+      el.style.right = "-90px";
       gameArea.appendChild(el);
 
-      obstacles.push({
-        el,
-        x: gameArea.clientWidth + 60,
-        passed: false,
-        symbol
-      });
+      obstacles.push({ el, x: gameArea.clientWidth + 90, passed: false });
     }
 
-    function jump() {
-      if (!isRunning) {
-        startGame();
-        return;
-      }
+    function jump(){
+      if (!isRunning) return;
       if (isJumping) return;
       isJumping = true;
-      jumpVelocity = 11;
+      v = JUMP_V;
     }
 
-    function gameLoop() {
-      animationFrameId = requestAnimationFrame(gameLoop);
+    function currentSpeed(){
+      const m = MODES[modeKey];
+      return m.baseSpeed + m.speedByScore(score);
+    }
 
+    function loop(t){
+      raf = requestAnimationFrame(loop);
       if (!isRunning) return;
 
-      if (isJumping) {
-        positionY += jumpVelocity;
-        jumpVelocity += gravity;
-        if (positionY <= 0) {
-          positionY = 0;
+      const dt = lastT ? Math.min(32, t - lastT) : 16;
+      lastT = t;
+
+      if (isJumping){
+        y += v;
+        v += GRAVITY;
+        if (y <= 0){
+          y = 0;
+          v = 0;
           isJumping = false;
         }
       }
+      runner.style.transform = `translateY(${-y}px)`;
 
-      runner.style.bottom = (baseBottom + positionY) + "px";
-
-      spawnTimer -= 16;
-      if (spawnTimer <= 0) {
+      spawnMs -= dt;
+      if (spawnMs <= 0){
         spawnObstacle();
-        spawnTimer = 800 + Math.random() * 600;
+        spawnMs = randSpawnMs();
       }
 
-      const speed = 5.5;
+      const speed = currentSpeed();
+      const runnerRect = runner.getBoundingClientRect();
+      const runnerX = cssVarNumber("--runner-x");
 
-      for (let i = obstacles.length - 1; i >= 0; i--) {
+      for (let i = obstacles.length - 1; i >= 0; i--){
         const o = obstacles[i];
         o.x -= speed;
         o.el.style.right = (gameArea.clientWidth - o.x) + "px";
 
-        if (!o.passed && o.x < 120) {
+        if (!o.passed && o.x < runnerX){
           o.passed = true;
           score++;
-          scoreEl.textContent = score;
+          scoreEl.textContent = String(score);
         }
 
-        const runnerRect = runner.getBoundingClientRect();
         const obsRect = o.el.getBoundingClientRect();
+        const overlapX = runnerRect.left < obsRect.right - 4 && runnerRect.right > obsRect.left + 4;
+        const overlapY = runnerRect.bottom > obsRect.top + 6 && runnerRect.top < obsRect.bottom - 6;
 
-        const overlapX =
-          runnerRect.left < obsRect.right - 4 &&
-          runnerRect.right > obsRect.left + 4;
-        const overlapY =
-          runnerRect.bottom > obsRect.top + 4 &&
-          runnerRect.top < obsRect.bottom - 4;
+        if (overlapX && overlapY) return gameOver();
 
-        if (overlapX && overlapY) {
-          return gameOver();
-        }
-
-        if (o.x < -60) {
+        if (o.x < -120){
           o.el.remove();
           obstacles.splice(i, 1);
         }
       }
     }
 
-    function gameOver() {
+    function gameOver(){
       isRunning = false;
-      cancelAnimationFrame(animationFrameId);
+      cancelAnimationFrame(raf);
+      raf = null;
+      lastT = 0;
 
-      if (score > bestScore) {
-        bestScore = score;
-        localStorage.setItem("gradsour_best", String(bestScore));
-        bestScoreEl.textContent = bestScore;
+      const currentBest = getBestForMode(modeKey);
+      if (score > currentBest){
+        setBestForMode(modeKey, score);
       }
+      updateBestUI();
 
       overlay.style.display = "flex";
-      overlayTitle.textContent = "./ GAME OVER";
-      overlayText.textContent = "SPACE to restart";
+      overlayTitle.textContent = `./ GAME OVER (${MODES[modeKey].name})`;
+      overlayText.textContent = "Choose mode to restart";
       overlayScore.textContent = `SCORE: ${score}`;
-      startBtn.textContent = "./ RESTART";
-      startBtn.className = "btn";
+      startNormalBtn.textContent = "./ RESTART (CLASSIC)";
+      startChallengeBtn.textContent = "./ RESTART (CHALLENGE)";
     }
 
     window.addEventListener("keydown", (e) => {
@@ -474,9 +483,8 @@
       }
     });
 
-    startBtn.addEventListener("click", () => {
-      startGame();
-    });
+    startNormalBtn.addEventListener("click", () => startGame("normal"));
+    startChallengeBtn.addEventListener("click", () => startGame("challenge"));
 
     resetGame();
   </script>
