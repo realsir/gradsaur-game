@@ -87,8 +87,10 @@
       background: linear-gradient(90deg, #200736, #3e0d6a, #2a0b5a);
       color: #ffe8ff;
       border-bottom: 1px solid rgba(255,255,255,0.1);
+      gap: 22px;
+      flex-wrap: wrap;
     }
-    .hud-left,.hud-right{ display:flex; gap:22px; align-items:center; }
+    .hud-left,.hud-right{ display:flex; gap:22px; align-items:center; flex-wrap: wrap; }
     .hud-label{ opacity: .85; }
     .hud-value{
       color: var(--accent-color);
@@ -104,6 +106,7 @@
       height: min(var(--area-h), 68vh);
       background: linear-gradient(#0a0215 0%, #050008 40%, #020002 100%);
       overflow: hidden;
+      touch-action: manipulation;
     }
 
     .ground{
@@ -122,13 +125,21 @@
 
     .runner, .obstacle{
       position:absolute;
-      bottom: var(--ground-h);
       font-size: 44px;
       text-shadow: 0 0 12px rgba(0,0,0,1);
       will-change: transform;
+      transform: translate3d(0,0,0);
     }
-    .runner{ left: var(--runner-x); color: var(--accent-color); }
-    .obstacle{ color: var(--danger-color); }
+    .runner{
+      left: var(--runner-x);
+      bottom: var(--ground-h);
+      color: var(--accent-color);
+    }
+    .obstacle{
+      bottom: var(--ground-h);
+      color: var(--danger-color);
+      left: 0;
+    }
 
     .overlay{
       position:absolute;
@@ -190,6 +201,13 @@
       box-shadow: 0 0 18px rgba(255,75,145,0.45);
     }
 
+    .btn-waves{
+      background: linear-gradient(135deg, #8bf7ff, #5a8dff);
+      color: #070022;
+      border-color: rgba(255,255,255,0.9);
+      box-shadow: 0 0 18px rgba(90,141,255,0.45);
+    }
+
     .btn:hover{
       transform: translateY(-2px);
       box-shadow: 0 8px 24px rgba(0,0,0,0.9);
@@ -229,12 +247,15 @@
 
         <div class="overlay" id="overlay">
           <div class="overlay-title" id="overlayTitle">./ READY?</div>
-          <div class="overlay-text" id="overlayText">Choose mode, then SPACE / ↑ to jump</div>
+          <div class="overlay-text" id="overlayText">
+            Choose mode, then SPACE / ↑ (or tap) to jump. Double jump enabled.
+          </div>
           <div class="overlay-score" id="overlayScore"></div>
 
           <div class="btn-row">
             <button class="btn btn-accent" id="startNormalBtn">./ CLASSIC</button>
             <button class="btn btn-danger" id="startChallengeBtn">./ CHALLENGE</button>
+            <button class="btn btn-waves" id="startWavesBtn">./ WAVES</button>
           </div>
         </div>
       </div>
@@ -252,7 +273,7 @@
       const lines = out.trimEnd().split("\n");
       bgTiles.innerHTML = lines.map(line => `<span>${line}</span>`).join("\n");
     }
-    window.addEventListener("resize", fillBg);
+    window.addEventListener("resize", fillBg, { passive: true });
     fillBg();
 
     const runner = document.getElementById("runner");
@@ -264,60 +285,144 @@
 
     const startNormalBtn = document.getElementById("startNormalBtn");
     const startChallengeBtn = document.getElementById("startChallengeBtn");
+    const startWavesBtn = document.getElementById("startWavesBtn");
 
     const scoreEl = document.getElementById("score");
     const bestLabelEl = document.getElementById("bestLabel");
     const bestScoreEl = document.getElementById("bestScore");
 
+    function cssVarNumber(name){
+      return parseFloat(getComputedStyle(document.documentElement).getPropertyValue(name)) || 0;
+    }
+    function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
+    function randRange(min, max){ return min + Math.random() * (max - min); }
+    function lerp(a, b, t){ return a + (b - a) * t; }
+
     const BEST_KEYS = {
       normal: "gradsaur_best_normal",
-      challenge: "gradsaur_best_challenge"
+      challenge: "gradsaur_best_challenge",
+      pattern: "gradsaur_best_waves" 
     };
+
+    function getBestForMode(key){
+      return parseInt(localStorage.getItem(BEST_KEYS[key]) || "0", 10);
+    }
+    function setBestForMode(key, value){
+      localStorage.setItem(BEST_KEYS[key], String(value));
+    }
 
     const MODES = {
       normal: {
         name: "CLASSIC",
-        baseSpeed: 6.2,
-        speedByScore: (score) => 0,
-        spawnRange: () => ({ min: 700, max: 1350 })
+        baseSpeed: 520,
+        speedByScore: () => 0,
+        spawnRangeMs: () => ({ min: 520, max: 900 })
       },
       challenge: {
         name: "CHALLENGE",
-        baseSpeed: 6.2,
-        speedByScore: (score) => Math.floor(score / 5) * 1.3,
-
-        spawnRange: () => ({ min: 980, max: 1700 })
+        baseSpeed: 540,
+        speedByScore: (score) => Math.floor(score / 6) * 85,
+        spawnRangeMs: () => ({ min: 620, max: 1050 })
+      },
+      pattern: {
+        name: "WAVES",
+        baseSpeed: 535,
+        speedByScore: (score) => Math.floor(score / 30) * 10
       }
     };
 
+    const MAX_JUMPS = 2;
+    const JUMP_V1 = 980;
+    const JUMP_V2 = 820;
+    const GRAVITY = 2800;
+
+    const STEP_MS = 1000 / 60;
+    const MAX_ACCUM_MS = 250;
+
+    const RUNNER_W = 34;
+    const RUNNER_H = 42;
+    const OB_W = 22;
+    const OB_H = 36;
+
+    let areaW = 0;
+    let areaH = 0;
+    let groundH = 0;
+    let runnerX = 0;
+
+    function recalcLayout(){
+      areaW = gameArea.clientWidth;
+      areaH = gameArea.clientHeight;
+      groundH = cssVarNumber("--ground-h");
+      runnerX = cssVarNumber("--runner-x");
+    }
+    window.addEventListener("resize", recalcLayout, { passive: true });
+    recalcLayout();
+
     let modeKey = "normal";
-
     let raf = null;
-    let isRunning = false;
-    let isJumping = false;
-    let y = 0;
-    let v = 0;
+    let running = false;
 
-    const GRAVITY = -0.62;
-    const JUMP_V = 12.8;
+    let y = 0, vy = 0, jumpsUsed = 0;
+    let prevY = 0;
 
     let obstacles = [];
-    let spawnMs = 0;
+    let spawnTimerMs = 0;
 
     let score = 0;
-    let lastT = 0;
 
-    function cssVarNumber(name){
-      return parseFloat(getComputedStyle(document.documentElement).getPropertyValue(name)) || 0;
+    let lastTs = 0;
+    let accMs = 0;
+
+    function makeWavesSpawner(getSpeedPxPerS){
+      const steps = [
+        { type: "ob", band: "fast" }, { type: "ob", band: "fast" },
+        { type: "pause", band: "short" },
+        { type: "ob", band: "mid" },  { type: "ob", band: "mid" },
+        { type: "pause", band: "long" },
+        { type: "ob", band: "single" },
+        { type: "pause", band: "short" }
+      ];
+
+      let i = 0;
+
+      function minGapMs(){
+        const s = clamp(getSpeedPxPerS(), 480, 760);
+        return lerp(400, 540, (s - 480) / (760 - 480));
+      }
+
+      function msForObstacle(band){
+        const base =
+          (band === "fast")   ? randRange(420, 520) :
+          (band === "mid")    ? randRange(520, 660) :
+          (band === "single") ? randRange(600, 780) :
+                                randRange(520, 720);
+
+        return Math.max(base, minGapMs());
+      }
+
+      function msForPause(band){
+        if (band === "short") return randRange(850, 1100);
+        if (band === "long")  return randRange(1200, 1650);
+        return randRange(950, 1400);
+      }
+
+      return {
+        reset(){ i = 0; },
+        next(){
+          const step = steps[i];
+          i = (i + 1) % steps.length;
+          if (step.type === "pause") return msForPause(step.band);
+          return msForObstacle(step.band);
+        }
+      };
     }
 
-    function getBestForMode(key){
-      return parseInt(localStorage.getItem(BEST_KEYS[key]) || "0", 10); 
+    function currentSpeedPxPerS(){
+      const m = MODES[modeKey];
+      return m.baseSpeed + m.speedByScore(score);
     }
 
-    function setBestForMode(key, value){
-      localStorage.setItem(BEST_KEYS[key], String(value)); 
-    }
+    const wavesSpawner = makeWavesSpawner(() => currentSpeedPxPerS());
 
     function updateBestUI(){
       const best = getBestForMode(modeKey);
@@ -325,147 +430,72 @@
       bestScoreEl.textContent = String(best);
     }
 
-    function randSpawnMs(){
-      const r = MODES[modeKey].spawnRange(); 
-      return r.min + Math.random() * (r.max - r.min);
-    }
-
     function setOverlayReady(){
       overlay.style.display = "flex";
       overlayTitle.textContent = "./ READY?";
-      overlayText.textContent = "Choose mode, then SPACE / ↑ to jump";
+      overlayText.textContent = "Choose mode, then SPACE / ↑ (or tap) to jump. Double jump enabled.";
       overlayScore.textContent = "";
       startNormalBtn.textContent = "./ CLASSIC";
       startChallengeBtn.textContent = "./ CHALLENGE";
+      startWavesBtn.textContent = "./ WAVES";
       updateBestUI();
     }
 
-    function resetGame(){
-      cancelAnimationFrame(raf);
-      raf = null;
-      lastT = 0;
+    function clearObstacles(){
+      for (const o of obstacles) o.el.remove();
+      obstacles = [];
+    }
 
-      isRunning = false;
-      isJumping = false;
+    function resetState(){
+      running = false;
 
-      y = 0; v = 0;
-      spawnMs = 0;
+      y = 0; prevY = 0; vy = 0; jumpsUsed = 0;
+
+      spawnTimerMs = 0;
 
       score = 0;
       scoreEl.textContent = "0";
 
-      obstacles.forEach(o => o.el.remove());
-      obstacles = [];
+      lastTs = 0;
+      accMs = 0;
 
-      runner.style.transform = "translateY(0px)";
-      setOverlayReady();
+      runner.style.transform = "translate3d(0,0,0)";
+      clearObstacles();
+      recalcLayout();
+
+      wavesSpawner.reset();
     }
 
-    function startGame(selectedModeKey){
-      modeKey = selectedModeKey;
+    function randSpawnMs(){
+      const r = MODES[modeKey].spawnRangeMs();
+      return randRange(r.min, r.max);
+    }
+
+    function nextSpawnMs(){
+      if (modeKey === "pattern") return wavesSpawner.next();
+      return randSpawnMs();
+    }
+
+    function startGame(newModeKey){
+      modeKey = newModeKey;
       updateBestUI();
 
       overlay.style.display = "none";
-      isRunning = true;
+      resetState();
+      running = true;
 
-      obstacles.forEach(o => o.el.remove());
-      obstacles = [];
-
-      y = 0; v = 0;
-
-      spawnMs = randSpawnMs();
-
-      score = 0;
-      scoreEl.textContent = "0";
-
-      lastT = 0;
-      loop(performance.now());
-    }
-
-    function spawnObstacle(){
-      const el = document.createElement("div");
-      el.className = "obstacle";
-      el.textContent = Math.random() < 0.5 ? "." : "/";
-      el.style.right = "-90px";
-      gameArea.appendChild(el);
-
-      obstacles.push({ el, x: gameArea.clientWidth + 90, passed: false });
-    }
-
-    function jump(){
-      if (!isRunning) return;
-      if (isJumping) return;
-      isJumping = true;
-      v = JUMP_V;
-    }
-
-    function currentSpeed(){
-      const m = MODES[modeKey];
-      return m.baseSpeed + m.speedByScore(score);
-    }
-
-    function loop(t){
-      raf = requestAnimationFrame(loop);
-      if (!isRunning) return;
-
-      const dt = lastT ? Math.min(32, t - lastT) : 16;
-      lastT = t;
-
-      if (isJumping){
-        y += v;
-        v += GRAVITY;
-        if (y <= 0){
-          y = 0;
-          v = 0;
-          isJumping = false;
-        }
-      }
-      runner.style.transform = `translateY(${-y}px)`;
-
-      spawnMs -= dt;
-      if (spawnMs <= 0){
-        spawnObstacle();
-        spawnMs = randSpawnMs();
-      }
-
-      const speed = currentSpeed();
-      const runnerRect = runner.getBoundingClientRect();
-      const runnerX = cssVarNumber("--runner-x");
-
-      for (let i = obstacles.length - 1; i >= 0; i--){
-        const o = obstacles[i];
-        o.x -= speed;
-        o.el.style.right = (gameArea.clientWidth - o.x) + "px";
-
-        if (!o.passed && o.x < runnerX){
-          o.passed = true;
-          score++;
-          scoreEl.textContent = String(score);
-        }
-
-        const obsRect = o.el.getBoundingClientRect();
-        const overlapX = runnerRect.left < obsRect.right - 4 && runnerRect.right > obsRect.left + 4;
-        const overlapY = runnerRect.bottom > obsRect.top + 6 && runnerRect.top < obsRect.bottom - 6;
-
-        if (overlapX && overlapY) return gameOver();
-
-        if (o.x < -120){
-          o.el.remove();
-          obstacles.splice(i, 1);
-        }
-      }
+      spawnTimerMs = nextSpawnMs();
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(frame);
     }
 
     function gameOver(){
-      isRunning = false;
+      running = false;
       cancelAnimationFrame(raf);
       raf = null;
-      lastT = 0;
 
-      const currentBest = getBestForMode(modeKey);
-      if (score > currentBest){
-        setBestForMode(modeKey, score);
-      }
+      const best = getBestForMode(modeKey);
+      if (score > best) setBestForMode(modeKey, score);
       updateBestUI();
 
       overlay.style.display = "flex";
@@ -474,19 +504,134 @@
       overlayScore.textContent = `SCORE: ${score}`;
       startNormalBtn.textContent = "./ RESTART (CLASSIC)";
       startChallengeBtn.textContent = "./ RESTART (CHALLENGE)";
+      startWavesBtn.textContent = "./ RESTART (WAVES)";
+    }
+
+    function spawnObstacle(){
+      const el = document.createElement("div");
+      el.className = "obstacle";
+      el.textContent = Math.random() < 0.5 ? "." : "/";
+      gameArea.appendChild(el);
+
+      const x0 = areaW + 90;
+      obstacles.push({ el, x: x0, prevX: x0, passed: false });
+    }
+
+    function doJump(){
+      if (!running) return;
+      if (jumpsUsed >= MAX_JUMPS) return;
+
+      const v0 = (jumpsUsed === 0) ? JUMP_V1 : JUMP_V2;
+      vy = v0;
+      jumpsUsed++;
+    }
+
+    function aabbOverlap(ax, ay, aw, ah, bx, by, bw, bh){
+      return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
+    }
+
+    function fixedStep(dtMs){
+      const dt = dtMs / 1000;
+
+      prevY = y;
+      for (const o of obstacles) o.prevX = o.x;
+
+      if (jumpsUsed > 0){
+        y += vy * dt;
+        vy -= GRAVITY * dt;
+
+        if (y <= 0){
+          y = 0;
+          vy = 0;
+          jumpsUsed = 0;
+        }
+      }
+
+      spawnTimerMs -= dtMs;
+      if (spawnTimerMs <= 0){
+        spawnObstacle();
+        spawnTimerMs += nextSpawnMs();
+      }
+
+      const dx = currentSpeedPxPerS() * dt;
+      for (const o of obstacles) o.x -= dx;
+
+      const runnerTopLeftX = runnerX;
+      const runnerTopLeftY = (areaH - groundH - RUNNER_H) - y;
+      const obstacleTopLeftY = (areaH - groundH - OB_H);
+
+      for (let i = obstacles.length - 1; i >= 0; i--){
+        const o = obstacles[i];
+
+        if (!o.passed && o.x + OB_W < runnerX){
+          o.passed = true;
+          score++;
+          scoreEl.textContent = String(score);
+        }
+
+        if (aabbOverlap(runnerTopLeftX, runnerTopLeftY, RUNNER_W, RUNNER_H, o.x, obstacleTopLeftY, OB_W, OB_H)){
+          gameOver();
+          return;
+        }
+
+        if (o.x < -140){
+          o.el.remove();
+          obstacles.splice(i, 1);
+        }
+      }
+    }
+
+    function render(alpha){
+      const yRender = lerp(prevY, y, alpha);
+      runner.style.transform = `translate3d(0, ${-yRender}px, 0)`;
+
+      for (const o of obstacles){
+        const xRender = lerp(o.prevX, o.x, alpha);
+        o.el.style.transform = `translate3d(${xRender}px, 0, 0)`;
+      }
+    }
+
+    function frame(ts){
+      if (!running) return;
+
+      if (!lastTs) lastTs = ts;
+      let frameTime = ts - lastTs;
+      lastTs = ts;
+
+      frameTime = clamp(frameTime, 0, 100);
+      accMs = clamp(accMs + frameTime, 0, MAX_ACCUM_MS);
+
+      while (accMs >= STEP_MS){
+        fixedStep(STEP_MS);
+        if (!running) return;
+        accMs -= STEP_MS;
+      }
+
+      const alpha = accMs / STEP_MS;
+      render(alpha);
+
+      raf = requestAnimationFrame(frame);
     }
 
     window.addEventListener("keydown", (e) => {
       if (e.code === "Space" || e.code === "ArrowUp") {
         e.preventDefault();
-        jump();
+        doJump();
       }
-    });
+    }, { passive: false });
+
+    gameArea.addEventListener("pointerdown", (e) => {
+      if (overlay.style.display !== "none") return;
+      e.preventDefault();
+      doJump();
+    }, { passive: false });
 
     startNormalBtn.addEventListener("click", () => startGame("normal"));
     startChallengeBtn.addEventListener("click", () => startGame("challenge"));
+    startWavesBtn.addEventListener("click", () => startGame("pattern"));
 
-    resetGame();
+    resetState();
+    setOverlayReady();
   </script>
 </body>
 </html>
