@@ -101,6 +101,35 @@
       text-align: right;
     }
 
+    .mission{
+      display:flex;
+      flex-direction:column;
+      gap: 6px;
+      align-items:flex-end;
+      min-width: 300px;
+    }
+    .mission-line{
+      display:flex;
+      gap: 10px;
+      align-items:center;
+      white-space: nowrap;
+    }
+    .mission-text{
+      font-size: 12px;
+      opacity: .95;
+      max-width: 420px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .mission-prog{
+      font-size: 12px;
+      color: #c9fffb;
+      opacity: .95;
+      min-width: 92px;
+      text-align: right;
+    }
+
     .game-area{
       position: relative;
       height: min(var(--area-h), 68vh);
@@ -127,8 +156,8 @@
       position:absolute;
       font-size: 44px;
       text-shadow: 0 0 12px rgba(0,0,0,1);
-      will-change: transform;
       transform: translate3d(0,0,0);
+      will-change: transform;
     }
     .runner{
       left: var(--runner-x);
@@ -159,7 +188,7 @@
       color: var(--accent-color);
       text-shadow: 0 0 12px rgba(0,0,0,0.9);
     }
-    .overlay-text{ font-size: 14px; opacity: .97; font-weight: 600; max-width: 560px; }
+    .overlay-text{ font-size: 14px; opacity: .97; font-weight: 600; max-width: 700px; }
     .overlay-score{ font-size: 16px; color: var(--accent-color); font-weight: 700; }
 
     .btn-row{
@@ -208,10 +237,21 @@
       box-shadow: 0 0 18px rgba(90,141,255,0.45);
     }
 
+    .btn-missions{
+      background: linear-gradient(135deg, #a7ff83, #5affd6);
+      color: #06160f;
+      border-color: rgba(255,255,255,0.9);
+      box-shadow: 0 0 18px rgba(90,255,214,0.35);
+    }
+
     .btn:hover{
       transform: translateY(-2px);
       box-shadow: 0 8px 24px rgba(0,0,0,0.9);
       filter: brightness(1.05);
+    }
+
+    @media (max-width: 900px){
+      .mission{ align-items:flex-start; min-width: 0; }
     }
 
     @media (max-width: 768px){
@@ -220,6 +260,7 @@
       .runner,.obstacle{ font-size: 36px; }
       .bg-tiles{ font-size: 10px; }
       .btn{ min-width: 180px; }
+      .mission-text{ max-width: 260px; }
     }
   </style>
 </head>
@@ -234,8 +275,20 @@
         <div class="hud-left">
           <span class="hud-label">SCORE</span>
           <span class="hud-value" id="score">0</span>
+
+          <span class="hud-label" id="missionsDoneLabel" style="display:none;">MISSIONS</span>
+          <span class="hud-value" id="missionsDone" style="display:none; min-width:28px;">0</span>
         </div>
+
         <div class="hud-right">
+          <div class="mission" id="missionBox" style="display:none;">
+            <div class="mission-line">
+              <span class="hud-label">MISSION</span>
+              <span class="mission-prog" id="missionProg">0/0</span>
+            </div>
+            <div class="mission-text" id="missionText">-</div>
+          </div>
+
           <span class="hud-label" id="bestLabel">BEST</span>
           <span class="hud-value" id="bestScore">0</span>
         </div>
@@ -256,6 +309,7 @@
             <button class="btn btn-accent" id="startNormalBtn">./ CLASSIC</button>
             <button class="btn btn-danger" id="startChallengeBtn">./ CHALLENGE</button>
             <button class="btn btn-waves" id="startWavesBtn">./ WAVES</button>
+            <button class="btn btn-missions" id="startMissionsBtn">./ MISSIONS</button>
           </div>
         </div>
       </div>
@@ -269,9 +323,9 @@
       const cols = Math.ceil(window.innerWidth / tileW) + 2;
       const rows = Math.ceil(window.innerHeight / tileW) + 6;
       let out = "";
-      for (let r = 0; r < rows; r++) out += "./".repeat(cols) + "\n";
-      const lines = out.trimEnd().split("\n");
-      bgTiles.innerHTML = lines.map(line => `<span>${line}</span>`).join("\n");
+      for (let r = 0; r < rows; r++) out += "./".repeat(cols) + "\\n";
+      const lines = out.trimEnd().split("\\n");
+      bgTiles.innerHTML = lines.map(line => `<span>${line}</span>`).join("\\n");
     }
     window.addEventListener("resize", fillBg, { passive: true });
     fillBg();
@@ -286,24 +340,33 @@
     const startNormalBtn = document.getElementById("startNormalBtn");
     const startChallengeBtn = document.getElementById("startChallengeBtn");
     const startWavesBtn = document.getElementById("startWavesBtn");
+    const startMissionsBtn = document.getElementById("startMissionsBtn");
 
     const scoreEl = document.getElementById("score");
     const bestLabelEl = document.getElementById("bestLabel");
     const bestScoreEl = document.getElementById("bestScore");
+
+    const missionBox = document.getElementById("missionBox");
+    const missionTextEl = document.getElementById("missionText");
+    const missionProgEl = document.getElementById("missionProg");
+
+    const missionsDoneLabelEl = document.getElementById("missionsDoneLabel");
+    const missionsDoneEl = document.getElementById("missionsDone");
 
     function cssVarNumber(name){
       return parseFloat(getComputedStyle(document.documentElement).getPropertyValue(name)) || 0;
     }
     function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
     function randRange(min, max){ return min + Math.random() * (max - min); }
-    function lerp(a, b, t){ return a + (b - a) * t; }
+    function randInt(min, max){ return (Math.random() * (max - min + 1) + min) | 0; }
+    function pick(arr){ return arr[(Math.random() * arr.length) | 0]; }
 
     const BEST_KEYS = {
       normal: "gradsaur_best_normal",
       challenge: "gradsaur_best_challenge",
-      pattern: "gradsaur_best_waves" 
+      pattern: "gradsaur_best_waves",
+      missions: "gradsaur_best_missions"
     };
-
     function getBestForMode(key){
       return parseInt(localStorage.getItem(BEST_KEYS[key]) || "0", 10);
     }
@@ -321,13 +384,19 @@
       challenge: {
         name: "CHALLENGE",
         baseSpeed: 540,
-        speedByScore: (score) => Math.floor(score / 6) * 85,
+        speedByScore: (score) => ((score / 6) | 0) * 85,
         spawnRangeMs: () => ({ min: 620, max: 1050 })
       },
       pattern: {
         name: "WAVES",
         baseSpeed: 535,
-        speedByScore: (score) => Math.floor(score / 30) * 10
+        speedByScore: (score) => ((score / 30) | 0) * 10
+      },
+      missions: {
+        name: "MISSIONS",
+        baseSpeed: 520,
+        speedByScore: (score) => ((score / 12) | 0) * 18,
+        spawnRangeMs: () => ({ min: 560, max: 980 })
       }
     };
 
@@ -336,19 +405,14 @@
     const JUMP_V2 = 820;
     const GRAVITY = 2800;
 
-    const STEP_MS = 1000 / 60;
-    const MAX_ACCUM_MS = 250;
+    const MAX_DT_MS = 34; 
 
     const RUNNER_W = 34;
     const RUNNER_H = 42;
     const OB_W = 22;
     const OB_H = 36;
 
-    let areaW = 0;
-    let areaH = 0;
-    let groundH = 0;
-    let runnerX = 0;
-
+    let areaW = 0, areaH = 0, groundH = 0, runnerX = 0;
     function recalcLayout(){
       areaW = gameArea.clientWidth;
       areaH = gameArea.clientHeight;
@@ -363,17 +427,28 @@
     let running = false;
 
     let y = 0, vy = 0, jumpsUsed = 0;
-    let prevY = 0;
-
-    let obstacles = [];
+    let obstacles = []; 
     let spawnTimerMs = 0;
-
     let score = 0;
 
     let lastTs = 0;
-    let accMs = 0;
 
-    function makeWavesSpawner(getSpeedPxPerS){
+    const MAX_OBS_ONSCREEN = 18;
+    const obsPool = []; 
+
+    function acquireObstacleEl(){
+      const el = obsPool.pop();
+      if (el) return el;
+      const n = document.createElement("div");
+      n.className = "obstacle";
+      return n;
+    }
+    function releaseObstacleEl(el){
+      el.remove();
+      if (obsPool.length < 24) obsPool.push(el);
+    }
+
+    function makeWavesSpawner(){
       const steps = [
         { type: "ob", band: "fast" }, { type: "ob", band: "fast" },
         { type: "pause", band: "short" },
@@ -382,48 +457,191 @@
         { type: "ob", band: "single" },
         { type: "pause", band: "short" }
       ];
-
       let i = 0;
-
-      function minGapMs(){
-        const s = clamp(getSpeedPxPerS(), 480, 760);
-        return lerp(400, 540, (s - 480) / (760 - 480));
-      }
-
       function msForObstacle(band){
-        const base =
-          (band === "fast")   ? randRange(420, 520) :
-          (band === "mid")    ? randRange(520, 660) :
-          (band === "single") ? randRange(600, 780) :
-                                randRange(520, 720);
-
-        return Math.max(base, minGapMs());
+        return (band === "fast")   ? randRange(420, 520) :
+               (band === "mid")    ? randRange(520, 660) :
+               (band === "single") ? randRange(600, 780) :
+                                     randRange(520, 720);
       }
-
       function msForPause(band){
         if (band === "short") return randRange(850, 1100);
         if (band === "long")  return randRange(1200, 1650);
         return randRange(950, 1400);
       }
-
       return {
         reset(){ i = 0; },
         next(){
           const step = steps[i];
           i = (i + 1) % steps.length;
-          if (step.type === "pause") return msForPause(step.band);
-          return msForObstacle(step.band);
+          return (step.type === "pause") ? msForPause(step.band) : msForObstacle(step.band);
         }
       };
     }
+    const wavesSpawner = makeWavesSpawner();
 
     function currentSpeedPxPerS(){
       const m = MODES[modeKey];
       return m.baseSpeed + m.speedByScore(score);
     }
 
-    const wavesSpawner = makeWavesSpawner(() => currentSpeedPxPerS());
+    const MISSION_TIME_MIN_MS = 20000;
+    const MISSION_TIME_MAX_MS = 40000;
+    const MISSION_COOLDOWN_MS = 4000;
 
+    let mission = null;
+    let missionTimeLeftMs = 0;
+    let cooldownMs = 0;
+    let missionsDone = 0;
+
+    function missionsUIVisible(v){
+      missionBox.style.display = v ? "flex" : "none";
+      missionsDoneLabelEl.style.display = v ? "inline" : "none";
+      missionsDoneEl.style.display = v ? "inline-block" : "none";
+    }
+
+    function setMissionUI(text, prog){
+      if (missionTextEl.textContent !== text) missionTextEl.textContent = text;
+      if (missionProgEl.textContent !== prog) missionProgEl.textContent = prog;
+    }
+
+    function setMissionsDone(v){
+      const s = String(v);
+      if (missionsDoneEl.textContent !== s) missionsDoneEl.textContent = s;
+    }
+
+    function timeS(){ return Math.ceil(missionTimeLeftMs / 1000); }
+
+    function newMission(){
+      missionTimeLeftMs = randInt(MISSION_TIME_MIN_MS, MISSION_TIME_MAX_MS);
+      const pool = [
+        makeMission_DoubleJumps10(),
+        makeMission_SingleJumpsStreak10(),
+        makeMission_PassTwoInRow(),
+        makeMission_PassNFast(),
+        makeMission_NoDoublePassN()
+      ];
+
+      let next = pick(pool);
+      if (mission && pool.length > 1){
+        let guard = 0;
+        while (next.id === mission.id && guard++ < 6) next = pick(pool);
+      }
+
+      mission = next;
+      mission.reset?.();
+      setMissionUI(mission.text(), mission.progText());
+    }
+
+    function completeMission(){
+      missionsDone++;
+      setMissionsDone(missionsDone);
+
+      cooldownMs = MISSION_COOLDOWN_MS;
+      mission = null;
+
+      setMissionUI("./ COMPLETE! no-spawn 4s", `${missionsDone} done`);
+    }
+
+    function failMissionSoft(){
+      cooldownMs = Math.max(cooldownMs, 700);
+      newMission();
+    }
+
+    function missionTick(dtMs){
+      if (modeKey !== "missions") return;
+
+      if (cooldownMs > 0){
+        cooldownMs = Math.max(0, cooldownMs - dtMs);
+        if (cooldownMs === 0) newMission();
+        return;
+      }
+
+      if (!mission) newMission();
+
+      missionTimeLeftMs = Math.max(0, missionTimeLeftMs - dtMs);
+      if (missionTimeLeftMs === 0){
+        failMissionSoft();
+        return;
+      }
+
+      if (mission.checkDone()){
+        completeMission();
+        return;
+      }
+
+      setMissionUI(mission.text(), mission.progText());
+    }
+
+    // mission implementations
+    function makeMission_DoubleJumps10(){
+      const target = 10;
+      let count = 0;
+      return {
+        id: "double_jumps_10",
+        reset(){ count = 0; },
+        text: () => `Do ${target} DOUBLE jumps. Time: ${timeS()}s`,
+        progText: () => `${count}/${target}`,
+        onSecondJumpUsed: () => { count++; },
+        checkDone: () => count >= target
+      };
+    }
+
+    function makeMission_SingleJumpsStreak10(){
+      const target = 10;
+      let streak = 0;
+      return {
+        id: "single_jump_streak_10",
+        reset(){ streak = 0; },
+        text: () => `Single jumps streak ${target} (double resets). Time: ${timeS()}s`,
+        progText: () => `${streak}/${target}`,
+        onJump: (jumpIndexInAir) => { if (jumpIndexInAir === 1) streak++; },
+        onSecondJumpUsed: () => { streak = 0; },
+        checkDone: () => streak >= target
+      };
+    }
+
+    function makeMission_PassTwoInRow(){
+      const target = 2;
+      let streak = 0;
+      return {
+        id: "pass_two_in_row",
+        reset(){ streak = 0; },
+        text: () => `Pass ${target} obstacles in a row. Time: ${timeS()}s`,
+        progText: () => `${streak}/${target}`,
+        onPassObstacle: () => { streak++; },
+        checkDone: () => streak >= target
+      };
+    }
+
+    function makeMission_PassNFast(){
+      const target = randInt(8, 12);
+      let passed = 0;
+      return {
+        id: "pass_n_fast",
+        reset(){ passed = 0; },
+        text: () => `Pass ${target} obstacles. Time: ${timeS()}s`,
+        progText: () => `${passed}/${target}`,
+        onPassObstacle: () => { passed++; },
+        checkDone: () => passed >= target
+      };
+    }
+
+    function makeMission_NoDoublePassN(){
+      const target = randInt(8, 12);
+      let passed = 0;
+      return {
+        id: "no_double_pass_n",
+        reset(){ passed = 0; },
+        text: () => `Pass ${target} obs (double resets). Time: ${timeS()}s`,
+        progText: () => `${passed}/${target}`,
+        onSecondJumpUsed: () => { passed = 0; },
+        onPassObstacle: () => { passed++; },
+        checkDone: () => passed >= target
+      };
+    }
+
+    // ---------- UI ----------
     function updateBestUI(){
       const best = getBestForMode(modeKey);
       bestLabelEl.textContent = `BEST (${MODES[modeKey].name})`;
@@ -438,18 +656,21 @@
       startNormalBtn.textContent = "./ CLASSIC";
       startChallengeBtn.textContent = "./ CHALLENGE";
       startWavesBtn.textContent = "./ WAVES";
+      startMissionsBtn.textContent = "./ MISSIONS";
       updateBestUI();
     }
 
     function clearObstacles(){
-      for (const o of obstacles) o.el.remove();
-      obstacles = [];
+      for (let i = obstacles.length - 1; i >= 0; i--){
+        releaseObstacleEl(obstacles[i].el);
+      }
+      obstacles.length = 0;
     }
 
     function resetState(){
       running = false;
 
-      y = 0; prevY = 0; vy = 0; jumpsUsed = 0;
+      y = 0; vy = 0; jumpsUsed = 0;
 
       spawnTimerMs = 0;
 
@@ -457,13 +678,25 @@
       scoreEl.textContent = "0";
 
       lastTs = 0;
-      accMs = 0;
 
       runner.style.transform = "translate3d(0,0,0)";
       clearObstacles();
       recalcLayout();
 
       wavesSpawner.reset();
+
+      // missions state
+      mission = null;
+      missionTimeLeftMs = 0;
+      cooldownMs = 0;
+      missionsDone = 0;
+      setMissionsDone(0);
+      missionsUIVisible(modeKey === "missions");
+      if (modeKey === "missions"){
+        newMission();
+      } else {
+        setMissionUI("-", "0/0");
+      }
     }
 
     function randSpawnMs(){
@@ -505,41 +738,50 @@
       startNormalBtn.textContent = "./ RESTART (CLASSIC)";
       startChallengeBtn.textContent = "./ RESTART (CHALLENGE)";
       startWavesBtn.textContent = "./ RESTART (WAVES)";
+      startMissionsBtn.textContent = "./ RESTART (MISSIONS)";
     }
 
+    // ---------- gameplay ----------
     function spawnObstacle(){
-      const el = document.createElement("div");
-      el.className = "obstacle";
-      el.textContent = Math.random() < 0.5 ? "." : "/";
+      if (obstacles.length >= MAX_OBS_ONSCREEN) return;
+
+      const el = acquireObstacleEl();
+      el.textContent = (Math.random() < 0.5) ? "." : "/";
       gameArea.appendChild(el);
 
       const x0 = areaW + 90;
-      obstacles.push({ el, x: x0, prevX: x0, passed: false });
+      obstacles.push({ el, x: x0, passed: false });
+      el.style.transform = `translate3d(${x0}px,0,0)`;
     }
 
     function doJump(){
       if (!running) return;
       if (jumpsUsed >= MAX_JUMPS) return;
 
-      const v0 = (jumpsUsed === 0) ? JUMP_V1 : JUMP_V2;
-      vy = v0;
+      const jumpIndexInAir = jumpsUsed + 1;
+      vy = (jumpsUsed === 0) ? JUMP_V1 : JUMP_V2;
       jumpsUsed++;
+
+      if (modeKey === "missions" && mission){
+        mission.onJump?.(jumpIndexInAir);
+        if (jumpIndexInAir === 2) mission.onSecondJumpUsed?.();
+      }
     }
 
     function aabbOverlap(ax, ay, aw, ah, bx, by, bw, bh){
       return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
     }
 
-    function fixedStep(dtMs){
+    function update(dtMs){
       const dt = dtMs / 1000;
 
-      prevY = y;
-      for (const o of obstacles) o.prevX = o.x;
+      // missions timer/cooldown
+      missionTick(dtMs);
 
+      // physics
       if (jumpsUsed > 0){
         y += vy * dt;
         vy -= GRAVITY * dt;
-
         if (y <= 0){
           y = 0;
           vy = 0;
@@ -547,14 +789,23 @@
         }
       }
 
-      spawnTimerMs -= dtMs;
-      if (spawnTimerMs <= 0){
-        spawnObstacle();
-        spawnTimerMs += nextSpawnMs();
+      // spawns
+      if (!(modeKey === "missions" && cooldownMs > 0)){
+        spawnTimerMs -= dtMs;
+
+        // adaptive: if we are behind (dt big), slow down spawns a bit
+        const penalty = (dtMs > 22) ? 0.6 : 1.0;
+        while (spawnTimerMs <= 0){
+          spawnObstacle();
+          spawnTimerMs += nextSpawnMs() / penalty;
+          // safety
+          if (spawnTimerMs < -2000) { spawnTimerMs = 0; break; }
+        }
       }
 
-      const dx = currentSpeedPxPerS() * dt;
-      for (const o of obstacles) o.x -= dx;
+      // move + collisions
+      const speed = currentSpeedPxPerS();
+      const dx = speed * dt;
 
       const runnerTopLeftX = runnerX;
       const runnerTopLeftY = (areaH - groundH - RUNNER_H) - y;
@@ -562,11 +813,13 @@
 
       for (let i = obstacles.length - 1; i >= 0; i--){
         const o = obstacles[i];
+        o.x -= dx;
 
         if (!o.passed && o.x + OB_W < runnerX){
           o.passed = true;
           score++;
           scoreEl.textContent = String(score);
+          if (modeKey === "missions" && mission) mission.onPassObstacle?.();
         }
 
         if (aabbOverlap(runnerTopLeftX, runnerTopLeftY, RUNNER_W, RUNNER_H, o.x, obstacleTopLeftY, OB_W, OB_H)){
@@ -575,19 +828,17 @@
         }
 
         if (o.x < -140){
-          o.el.remove();
+          releaseObstacleEl(o.el);
           obstacles.splice(i, 1);
         }
       }
     }
 
-    function render(alpha){
-      const yRender = lerp(prevY, y, alpha);
-      runner.style.transform = `translate3d(0, ${-yRender}px, 0)`;
-
-      for (const o of obstacles){
-        const xRender = lerp(o.prevX, o.x, alpha);
-        o.el.style.transform = `translate3d(${xRender}px, 0, 0)`;
+    function render(){
+      runner.style.transform = `translate3d(0, ${-y}px, 0)`;
+      for (let i = 0; i < obstacles.length; i++){
+        const o = obstacles[i];
+        o.el.style.transform = `translate3d(${o.x}px,0,0)`;
       }
     }
 
@@ -595,24 +846,19 @@
       if (!running) return;
 
       if (!lastTs) lastTs = ts;
-      let frameTime = ts - lastTs;
+      let dtMs = ts - lastTs;
       lastTs = ts;
 
-      frameTime = clamp(frameTime, 0, 100);
-      accMs = clamp(accMs + frameTime, 0, MAX_ACCUM_MS);
+      dtMs = clamp(dtMs, 0, MAX_DT_MS);
 
-      while (accMs >= STEP_MS){
-        fixedStep(STEP_MS);
-        if (!running) return;
-        accMs -= STEP_MS;
-      }
-
-      const alpha = accMs / STEP_MS;
-      render(alpha);
+      update(dtMs);
+      if (!running) return;
+      render();
 
       raf = requestAnimationFrame(frame);
     }
 
+    // ---------- input ----------
     window.addEventListener("keydown", (e) => {
       if (e.code === "Space" || e.code === "ArrowUp") {
         e.preventDefault();
@@ -626,9 +872,11 @@
       doJump();
     }, { passive: false });
 
+    // ---------- buttons ----------
     startNormalBtn.addEventListener("click", () => startGame("normal"));
     startChallengeBtn.addEventListener("click", () => startGame("challenge"));
     startWavesBtn.addEventListener("click", () => startGame("pattern"));
+    startMissionsBtn.addEventListener("click", () => startGame("missions"));
 
     resetState();
     setOverlayReady();
